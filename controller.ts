@@ -15,9 +15,8 @@ export interface ReminderState {
 	lastNotifiedDay?: string;
 }
 
-export interface TimerHandle {
-	readonly id: number;
-}
+/** Opaque timer handle. The host decides its concrete representation. */
+export type TimerHandle = unknown;
 
 /**
  * Environment the controller runs against. The real extension supplies Pi

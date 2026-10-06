@@ -8,6 +8,7 @@ import {
 	runAllCoreTests,
 	runAllControllerTests,
 	formatReport,
+	getAllNumberedTests,
 	REMINDER_MESSAGE,
 	dayKey,
 } from "./tester.js";
@@ -151,6 +152,28 @@ describe("guard rails and edge cases", () => {
 
 // ─────────────────────────────────────────────────────────────
 // 3. Batch / report-level assertions
+// ─────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────
+// 4. Numbered edge-case tests (mirrors the CLI runner)
+// ─────────────────────────────────────────────────────────────
+
+describe("numbered edge-case tests via CLI harness", () => {
+	for (const test of getAllNumberedTests().filter((t) => t.id > 6)) {
+		it(`#${test.id}: ${test.name}`, () => {
+			const result = test.run();
+			if (!result.passed) {
+				throw new Error(
+					`Test #${test.id} failed:\n` +
+					result.errors.map((e) => `  • ${e}`).join("\n"),
+				);
+			}
+		});
+	}
+});
+
+// ─────────────────────────────────────────────────────────────
+// 5. Batch / report-level assertions
 // ─────────────────────────────────────────────────────────────
 
 describe("batch test runners", () => {

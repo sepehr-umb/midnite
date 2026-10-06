@@ -29,11 +29,6 @@ can ignore it and keep working.
   every `start()`, so reloads and session switches never accumulate timers or
   reuse an old session context.
 
-## Command
-
-- `/bedtime-test` — preview the reminder message without changing any reminder
-  state or creating timers.
-
 ## Install
 
 The extension lives in Pi's user extension directory and is auto-discovered:
@@ -42,11 +37,74 @@ The extension lives in Pi's user extension directory and is auto-discovered:
 ~/.pi/agent/extensions/midnite/
 ```
 
-To load a checkout directly:
+To run with a checkout directly:
 
 ```bash
 pi --extension /path/to/midnite/index.ts
 ```
+
+To install this copy:
+
+```bash
+cd ~/.pi/agent/extensions
+ln -s /path/to/midnite midnite
+```
+
+## Commands
+
+- `/bedtime-test` — preview the reminder message without changing any reminder
+  state or creating timers.
+
+## Running tests
+
+```bash
+# install dependencies
+npm install
+
+# run all tests once (CI / non-interactive)
+npm test
+
+# run tests in watch mode (re-run on file changes)
+npm run test:watch
+
+# run the custom CLI test runner (formatted numbered output)
+npm run test:run
+
+# re-run only previously failed tests via the CLI runner
+npm run test:failed
+
+# list all available numbered tests
+npm run test:list
+```
+
+You can also run the CLI runner directly for more control:
+
+```bash
+# list all tests
+npx tsx test-runner.ts --list
+
+# run all numbered tests
+npx tsx test-runner.ts --all
+
+# run a specific test (e.g., test #7)
+npx tsx test-runner.ts 7
+
+# run multiple specific tests
+npx tsx test-runner.ts 1 2 3
+
+# re-run failed tests
+npx tsx test-runner.ts --failed
+```
+
+## Building
+
+```bash
+# type-check the project
+npx tsc --noEmit
+```
+
+No compile step is needed at runtime since Pi loads TypeScript directly. Run
+type checking manually when making changes.
 
 ## Files
 
@@ -55,15 +113,32 @@ pi --extension /path/to/midnite/index.ts
 | `index.ts`          | Pi entry point: event wiring, state file, `/bedtime-test`.     |
 | `controller.ts`     | Testable lifecycle: startup check, polling, persistence, stop. |
 | `midnight.ts`       | Pure core: window check, day key, decision, message.           |
+| `tester.ts`         | Independent test harness with numbered edge cases.             |
+| `test-runner.ts`    | CLI runner for `tester.ts` (list, run, filter).                |
 | `*.test.ts`         | Vitest suites for each layer.                                  |
 
-## Development (TDD)
+## Architecture
 
-```bash
-npm install
-npm test        # vitest --run
-npx tsc --noEmit
-```
+The extension is split into three layers:
 
-The suite is written red/green: pure core logic, injected-dependency lifecycle,
-and the real extension factory are each covered by tests.
+1. **`midnight.ts`** — Pure, side-effect-free logic. Contains the window check,
+   day key formatting, and the decision engine. No Pi imports.
+2. **`controller.ts`** — Injected lifecycle manager. Handles startup check,
+   30s polling timer, state persistence, and clean shutdown. All side effects
+   go through the `ReminderHost` interface so tests can swap in fakes.
+3. **`index.ts`** — Pi-specific wiring. Adapts `ExtensionContext` to
+   `ReminderHost`, manages the state JSON file, and registers the
+   `/bedtime-test` command.
+
+### Key design decisions
+
+- **Minimal persistent state:** only `lastNotifiedDay` (a `"YYYY-MM-DD"` string)
+  is saved. No timestamps, counters, or complex structures.
+- **Timer safety:** `start()` always calls `stop()` first, so restarts and
+  reloads never leak timers. `session_shutdown` also clears the timer.
+- **Stale-timer guard:** if a laptop sleeps through the midnight window and
+  the timer fires the next day after 06:00, the controller detects the stale
+  timer and disarms itself instead of polling all day.
+- **At-most-once notify:** `saveState` is called *before* `notify`, so even
+  if the notification mechanism is fire-and-forget, a crash/restart won't
+  re-deliver.

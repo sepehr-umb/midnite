@@ -5,7 +5,7 @@
  * (startup check, 30s polling, persistence, shutdown cleanup, preview) can be
  * exercised under fake time without a live Pi runtime.
  */
-import { MidnightReminder, REMINDER_MESSAGE } from "./midnight.js";
+import { dayKey, isWithinWindow, MidnightReminder, REMINDER_MESSAGE } from "./midnight.js";
 
 /** Poll interval for the midnight check, in milliseconds. */
 export const CHECK_INTERVAL_MS = 30_000;
@@ -54,6 +54,7 @@ export function formatPreview(notify: Notify, host: ReminderHost): void {
  */
 export class ReminderController {
 	private timer: TimerHandle | undefined;
+	private timerSetDay: string | undefined;
 	private readonly reminder: MidnightReminder;
 
 	constructor(private readonly host: ReminderHost) {
@@ -75,6 +76,7 @@ export class ReminderController {
 			this.host.clearTimer(this.timer);
 			this.timer = undefined;
 		}
+		this.timerSetDay = undefined;
 	}
 
 	private tick(): void {
@@ -88,11 +90,21 @@ export class ReminderController {
 
 		if (decision.keepChecking && this.timer === undefined) {
 			this.timer = this.host.setTimer(() => {
-				// Release the fired handle before re-evaluating so `tick` can
-				// schedule a fresh one (or stop) without leaking the old timer.
+				const setDay = this.timerSetDay;
 				this.stop();
+
+				// Guard against timers that fire after the laptop slept through
+				// the midnight window. If the timer was set on a different day
+				// and we're now outside the window, the window has passed.
+				const now = this.host.now();
+				const today = dayKey(now);
+				if (setDay && setDay !== today && !isWithinWindow(now)) {
+					return;
+				}
+
 				this.tick();
 			}, CHECK_INTERVAL_MS);
+			this.timerSetDay = dayKey(this.host.now());
 		} else if (!decision.keepChecking) {
 			// Already notified today or window closed for good: stop polling.
 			this.stop();

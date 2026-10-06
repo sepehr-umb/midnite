@@ -5,6 +5,7 @@
 	"type": "module",
 	"description": "Pi extension that reminds you to sleep once between midnight and 06:00.",
 	"scripts": {
+		"demo": "tsx demo.ts",
 		"test": "vitest --run",
 		"test:watch": "vitest",
 		"test:list": "tsx test-runner.ts --list",
